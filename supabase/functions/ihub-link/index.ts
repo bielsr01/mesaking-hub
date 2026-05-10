@@ -13,13 +13,16 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-function normalizeIhubBaseUrl(domain: string | null | undefined) {
-  const cleanDomain = (domain || "ihub.arcn.com.br")
+// iHub API base URL is fixed; the `domain` stored on the integration is the
+// user's OWN system domain (e.g. "app.meudelivery.com.br"), used as a payload
+// field on link-merchant / action endpoints, NOT as the API host.
+const IHUB_BASE_URL = "https://ihub.arcn.com.br/api";
+
+function normalizeUserDomain(domain: string | null | undefined) {
+  return (domain || "")
     .trim()
     .replace(/^https?:\/\//i, "")
-    .replace(/\/api\/?$/i, "")
     .replace(/\/+$/, "");
-  return `https://${cleanDomain}/api`;
 }
 
 Deno.serve(async (req) => {
