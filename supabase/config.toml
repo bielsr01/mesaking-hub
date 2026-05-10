@@ -1,4 +1,4 @@
-project_id = "kcjrrnxsqdcgjqplgiku"
+project_id = "oqewofrmwxcbngmokyps"
 
 [functions.geocode]
 verify_jwt = false
@@ -10,4 +10,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ihub-webhook]
+verify_jwt = false
+
+[functions.ihub-link]
 verify_jwt = false
