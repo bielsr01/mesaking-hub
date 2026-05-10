@@ -37,6 +37,7 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
   const [saving, setSaving] = useState(false);
   const [linking, setLinking] = useState(false);
   const [userCodeData, setUserCodeData] = useState<any>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [authCode, setAuthCode] = useState("");
 
   const handleGenerateUserCode = async () => {
@@ -45,16 +46,22 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
       return;
     }
     setLinking(true);
+    setLinkError(null);
     try {
       const { data: res, error } = await supabase.functions.invoke("ihub-link", {
         body: { action: "generate-user-code", restaurantId },
       });
       if (error) throw error;
-      if (!res?.ok) throw new Error(res?.error || "Falha ao gerar código");
+      if (!res?.ok || !res?.userCode || !res?.authorizationCodeVerifier) {
+        const details = res?.data?.raw || res?.data?.message || res?.error || "Falha ao gerar código";
+        throw new Error(String(details));
+      }
       setUserCodeData(res);
       toast.success("Código gerado! Autorize no portal do iFood.");
     } catch (e: any) {
-      toast.error(e.message ?? "Erro");
+      const message = e.message ?? "Erro ao gerar User Code";
+      setLinkError(message);
+      toast.error(message);
     } finally {
       setLinking(false);
     }
@@ -254,19 +261,35 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
               </p>
 
               {!userCodeData ? (
-                <Button type="button" variant="outline" size="sm" onClick={handleGenerateUserCode} disabled={linking || !isConfigured}>
-                  {linking ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Link2 className="w-4 h-4 mr-1" />}
-                  Gerar User Code
-                </Button>
+                <div className="space-y-2">
+                  <Button type="button" variant="outline" size="sm" onClick={handleGenerateUserCode} disabled={linking || !isConfigured}>
+                    {linking ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Link2 className="w-4 h-4 mr-1" />}
+                    Gerar User Code
+                  </Button>
+                  {linkError && (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive break-words">
+                      {linkError}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   <div className="rounded bg-muted p-2 text-xs space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <strong>User Code:</strong>
                       <code className="px-1.5 py-0.5 bg-background rounded">{userCodeData.userCode}</code>
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copy(userCodeData.userCode, "User Code")}>
                         <Copy className="w-3 h-3" />
                       </Button>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong>Authorization Code Verifier:</strong>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copy(userCodeData.authorizationCodeVerifier, "Authorization Code Verifier")}>
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <code className="block rounded bg-background px-1.5 py-1 break-all">{userCodeData.authorizationCodeVerifier}</code>
                     </div>
                     {userCodeData.verificationUrlComplete && (
                       <a href={userCodeData.verificationUrlComplete} target="_blank" rel="noreferrer"
