@@ -1,6 +1,6 @@
 // iHub (iFood) webhook receiver
-// URL: https://kcjrrnxsqdcgjqplgiku.supabase.co/functions/v1/ihub-webhook
-// Configure this URL no painel do iHub (https://ihub.arcn.com.br)
+// URL exibida dinamicamente no painel: {SUPABASE_URL}/functions/v1/ihub-webhook
+// Configure esta URL no painel do iHub (https://ihub.arcn.com.br)
 // O iHub envia POST com o token secreto no header X-iFood-Hub-Signature.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
