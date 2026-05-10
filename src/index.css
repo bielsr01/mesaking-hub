@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Warm food-app palette */
+    --background: 30 40% 98%;
+    --foreground: 20 14% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 14% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14% 12%;
+
+    /* Amber/orange primary */
+    --primary: 22 92% 52%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 32 100% 60%;
+
+    --secondary: 30 30% 95%;
+    --secondary-foreground: 20 14% 18%;
+
+    --muted: 30 20% 94%;
+    --muted-foreground: 20 8% 42%;
+
+    --accent: 22 92% 96%;
+    --accent-foreground: 22 92% 32%;
+
+    --success: 142 65% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 95% 50%;
+    --warning-foreground: 20 14% 12%;
+
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 20% 88%;
+    --input: 30 20% 90%;
+    --ring: 22 92% 52%;
+
+    --radius: 0.75rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-warm: linear-gradient(135deg, hsl(22 92% 52%), hsl(8 88% 58%));
+    --shadow-soft: 0 4px 16px -4px hsl(22 60% 30% / 0.12);
+    --shadow-elegant: 0 12px 40px -12px hsl(22 60% 30% / 0.25);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 20 14% 18%;
+    --sidebar-primary: 22 92% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 20% 96%;
+    --sidebar-accent-foreground: 20 14% 12%;
+    --sidebar-border: 30 20% 90%;
+    --sidebar-ring: 22 92% 52%;
+  }
+
+  .dark {
+    --background: 20 14% 8%;
+    --foreground: 30 30% 96%;
+    --card: 20 14% 12%;
+    --card-foreground: 30 30% 96%;
+    --popover: 20 14% 12%;
+    --popover-foreground: 30 30% 96%;
+    --primary: 22 92% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 32 100% 60%;
+    --secondary: 20 10% 18%;
+    --secondary-foreground: 30 30% 96%;
+    --muted: 20 10% 18%;
+    --muted-foreground: 30 10% 65%;
+    --accent: 22 60% 22%;
+    --accent-foreground: 30 100% 90%;
+    --success: 142 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 95% 55%;
+    --warning-foreground: 20 14% 12%;
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 20 10% 22%;
+    --input: 20 10% 22%;
+    --ring: 22 92% 56%;
+    --sidebar-background: 20 14% 10%;
+    --sidebar-foreground: 30 30% 96%;
+    --sidebar-primary: 22 92% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 20 10% 16%;
+    --sidebar-accent-foreground: 30 30% 96%;
+    --sidebar-border: 20 10% 20%;
+    --sidebar-ring: 22 92% 56%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { font-family: 'Inter', system-ui, sans-serif; }
+  body { @apply bg-background text-foreground antialiased; }
+  h1, h2, h3, h4 { font-family: 'Manrope', 'Inter', sans-serif; letter-spacing: -0.02em; }
+}
+
+@layer utilities {
+  .bg-gradient-primary { background: var(--gradient-primary); }
+  .bg-gradient-warm { background: var(--gradient-warm); }
+  .shadow-soft { box-shadow: var(--shadow-soft); }
+  .shadow-elegant { box-shadow: var(--shadow-elegant); }
+
+  /* Animated check (draws circle then check mark) */
+  @keyframes draw-stroke { to { stroke-dashoffset: 0; } }
+  @keyframes pop-in {
+    0%   { transform: scale(0.6); opacity: 0; }
+    60%  { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .animated-check { animation: pop-in 0.6s ease-out both; }
+  .animated-check .check-circle {
+    stroke-dasharray: 170;
+    stroke-dashoffset: 170;
+    animation: draw-stroke 1s ease-out 0.1s forwards;
+  }
+  .animated-check .check-mark {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: draw-stroke 0.7s ease-out 0.9s forwards;
+  }
+}
