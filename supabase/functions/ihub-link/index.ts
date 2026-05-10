@@ -18,6 +18,17 @@ const supabase = createClient(
 // field on link-merchant / action endpoints, NOT as the API host.
 const IHUB_BASE_URL = "https://ihub.arcn.com.br/api";
 
+function parseJsonLike(text: string) {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+  try { return JSON.parse(cleaned); } catch { /* keep trying below */ }
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { /* fall through */ }
+  }
+  return null;
+}
+
 function normalizeUserDomain(domain: string | null | undefined) {
   return (domain || "")
     .trim()
@@ -93,14 +104,19 @@ Deno.serve(async (req) => {
       });
       const text = await r.text();
       const ct = r.headers.get("content-type") || "";
-      let data: any;
-      try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 300) }; }
-      if (!r.ok || !ct.includes("json") || !data?.userCode) {
+      const data = parseJsonLike(text);
+      console.log("[ihub-link] generate-user-code response", {
+        status: r.status,
+        contentType: ct,
+        hasUserCode: Boolean(data?.userCode),
+        preview: text.slice(0, 120),
+      });
+      if (!r.ok || !data?.userCode || !data?.authorizationCodeVerifier) {
         return new Response(JSON.stringify({
           error: "Resposta inválida do iHub. Verifique se o token está correto e se a integração foi salva.",
           status: r.status,
           contentType: ct,
-          data,
+          data: data ?? { raw: text.slice(0, 500) },
           calledUrl: url,
         }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
