@@ -12,7 +12,7 @@ import { Loader2, CheckCircle2, Copy, Utensils, Link2, ExternalLink } from "luci
 import { toast } from "sonner";
 
 const sb = supabase as any;
-const WEBHOOK_URL = "https://kcjrrnxsqdcgjqplgiku.supabase.co/functions/v1/ihub-webhook";
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ihub-webhook`;
 
 export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) {
   const [open, setOpen] = useState(false);
