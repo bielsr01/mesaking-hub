@@ -1043,6 +1043,9 @@ function Step2Address(props: {
           <p className="text-xs text-muted-foreground">
             {prevAddresses.length === 1 ? "Último endereço usado" : "Endereços usados anteriormente"}
           </p>
+          <p className="text-xs text-muted-foreground">
+            Selecione seu endereço clicando sobre ele ou cadastre um novo.
+          </p>
           <div className="space-y-2">
             {prevAddresses.map((p, i) => {
               const line = [
