@@ -1,3 +1,6 @@
+SET search_path TO public, extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 
 -- ============= ENUMS =============
 CREATE TYPE public.app_role AS ENUM ('master_admin', 'manager', 'customer');
