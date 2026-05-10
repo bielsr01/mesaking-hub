@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 
 -- ============= ENUMS =============
 CREATE TYPE public.app_role AS ENUM ('master_admin', 'manager', 'customer');
