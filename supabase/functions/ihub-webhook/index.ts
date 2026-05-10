@@ -1,11 +1,19 @@
 // iHub (iFood) webhook receiver
-// URL exibida dinamicamente no painel: {SUPABASE_URL}/functions/v1/ihub-webhook
-// Configure esta URL no painel do iHub (https://ihub.arcn.com.br)
-// O iHub envia POST com o token secreto no header X-iFood-Hub-Signature.
+// URL pública para configurar no painel iHub:
+//   {SUPABASE_URL}/functions/v1/ihub-webhook
+//
+// O iHub envia POST com:
+//   - Header `X-iFood-Hub-Signature` = secret_token cadastrado pelo cliente
+//   - Body JSON conforme docs (https://ihub.arcn.com.br/docs)
+//
+// Identificamos o restaurante combinando o secret_token (autenticidade) com
+// o merchantId do payload. Em PLC (PLACED), criamos o pedido em `orders` com
+// os dados completos vindos em `order_details`. Em demais eventos atualizamos
+// o status do pedido correspondente.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const corsHeaders = {
+const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-ifood-hub-signature, accept",
@@ -27,21 +35,44 @@ type IHubEvent = {
   order_details?: any;
 };
 
-// Map iHub fullCode -> internal order status
-function mapStatus(fullCode?: string): string | null {
-  switch (fullCode) {
-    case "PLACED": return "pending";
-    case "CONFIRMED": return "accepted";
-    case "PREPARATION_STARTED": return "preparing";
-    case "READY_TO_PICKUP": return "ready";
-    case "DISPATCHED": return "out_for_delivery";
-    case "CONCLUDED": return "delivered";
-    case "CANCELLED": return "cancelled";
-    default: return null;
-  }
+const STATUS_MAP: Record<string, string> = {
+  PLACED: "pending",
+  CONFIRMED: "accepted",
+  PREPARATION_STARTED: "preparing",
+  READY_TO_PICKUP: "ready",
+  DISPATCHED: "out_for_delivery",
+  CONCLUDED: "delivered",
+  CANCELLED: "cancelled",
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 }
 
-async function handlePlaced(integration: any, ev: IHubEvent) {
+async function findIntegration(token: string, merchantId?: string) {
+  if (merchantId) {
+    const { data } = await supabase
+      .from("ihub_integrations")
+      .select("*")
+      .eq("secret_token", token)
+      .eq("merchant_id", merchantId)
+      .maybeSingle();
+    if (data) return data;
+  }
+  const { data } = await supabase
+    .from("ihub_integrations")
+    .select("*")
+    .eq("secret_token", token)
+    .is("merchant_id", null)
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+async function createOrderFromPlaced(integration: any, ev: IHubEvent) {
   const od = ev.order_details ?? {};
   const customer = od.customer ?? {};
   const addr = od.deliveryAddress ?? {};
@@ -49,7 +80,6 @@ async function handlePlaced(integration: any, ev: IHubEvent) {
   const total = od.total ?? {};
   const phone = typeof customer.phone === "object" ? customer.phone?.number : customer.phone;
 
-  // Avoid duplicates
   const { data: existing } = await supabase
     .from("orders")
     .select("id")
@@ -97,82 +127,34 @@ async function handlePlaced(integration: any, ev: IHubEvent) {
   return data.id;
 }
 
-async function handleStatus(integration: any, ev: IHubEvent) {
-  const newStatus = mapStatus(ev.fullCode);
-  if (!newStatus || !ev.orderId) return;
+async function updateStatus(integration: any, ev: IHubEvent) {
+  const status = STATUS_MAP[ev.fullCode ?? ""];
+  if (!status || !ev.orderId) return;
   await supabase
     .from("orders")
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .update({ status, updated_at: new Date().toISOString() })
     .eq("restaurant_id", integration.restaurant_id)
     .eq("external_source", "ifood")
     .eq("external_id", ev.orderId);
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   const signature = req.headers.get("x-ifood-hub-signature") ?? "";
-  if (!signature) {
-    return new Response(JSON.stringify({ error: "Missing signature" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!signature) return jsonResponse({ error: "Missing X-iFood-Hub-Signature" }, 401);
 
-  // Parse body first — we need the merchantId to identify which restaurant
   let ev: IHubEvent;
   try {
     ev = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Invalid JSON" }, 400);
   }
 
-  // The iHub secret_token is per-account (not per-restaurant).
-  // The merchantId in the payload identifies which restaurant.
-  // We accept any integration that:
-  //   1) shares this secret_token (proves authenticity), AND
-  //   2) matches the merchantId from the event.
-  // If no merchant_id is mapped yet, fall back to the first integration with this token
-  // and auto-link the merchant_id on first event.
-  let integration: any = null;
-  if (ev.merchantId) {
-    const { data } = await supabase
-      .from("ihub_integrations")
-      .select("*")
-      .eq("secret_token", signature)
-      .eq("merchant_id", ev.merchantId)
-      .maybeSingle();
-    integration = data;
-  }
-  if (!integration) {
-    // Fallback: any integration with this token that hasn't been linked to a merchant yet
-    const { data } = await supabase
-      .from("ihub_integrations")
-      .select("*")
-      .eq("secret_token", signature)
-      .is("merchant_id", null)
-      .limit(1)
-      .maybeSingle();
-    integration = data;
-  }
+  const integration = await findIntegration(signature, ev.merchantId);
+  if (!integration) return jsonResponse({ error: "Unknown token / merchant not linked" }, 401);
 
-  if (!integration) {
-    return new Response(JSON.stringify({ error: "Unauthorized or merchant not linked" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // Log the raw event
   const { data: logged } = await supabase
     .from("ihub_events")
     .insert({
@@ -192,17 +174,16 @@ Deno.serve(async (req) => {
   try {
     if (!integration.enabled) {
       processError = "integration_disabled";
-    } else if (ev.code === "PLC" || ev.fullCode === "PLACED") {
-      await handlePlaced(integration, ev);
+    } else if (ev.fullCode === "PLACED" || ev.code === "PLC") {
+      await createOrderFromPlaced(integration, ev);
     } else {
-      await handleStatus(integration, ev);
+      await updateStatus(integration, ev);
     }
   } catch (e: any) {
     processError = e?.message ?? String(e);
     console.error("ihub-webhook process error", processError);
   }
 
-  // Update integration last seen + auto-link merchantId if not yet set
   await supabase
     .from("ihub_integrations")
     .update({
@@ -219,8 +200,5 @@ Deno.serve(async (req) => {
       .eq("id", logged.id);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ ok: true });
 });
