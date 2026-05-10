@@ -13,13 +13,16 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-function normalizeIhubBaseUrl(domain: string | null | undefined) {
-  const cleanDomain = (domain || "ihub.arcn.com.br")
+// iHub API base URL is fixed; the `domain` stored on the integration is the
+// user's OWN system domain (e.g. "app.meudelivery.com.br"), used as a payload
+// field on link-merchant / action endpoints, NOT as the API host.
+const IHUB_BASE_URL = "https://ihub.arcn.com.br/api";
+
+function normalizeUserDomain(domain: string | null | undefined) {
+  return (domain || "")
     .trim()
     .replace(/^https?:\/\//i, "")
-    .replace(/\/api\/?$/i, "")
     .replace(/\/+$/, "");
-  return `https://${cleanDomain}/api`;
 }
 
 Deno.serve(async (req) => {
@@ -67,8 +70,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  const base = normalizeIhubBaseUrl(integration.domain);
+  const base = IHUB_BASE_URL;
+  const userDomain = normalizeUserDomain(integration.domain);
   const token = integration.secret_token;
+
+  if (!userDomain) {
+    return new Response(JSON.stringify({ error: "Domínio do sistema não configurado. Cadastre o mesmo domínio que está no painel iHub." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     if (action === "generate-user-code") {
@@ -106,7 +116,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          domain: integration.domain || "ihub.arcn.com.br",
+          domain: userDomain,
           authorizationCode,
           authorizationCodeVerifier,
         }),
