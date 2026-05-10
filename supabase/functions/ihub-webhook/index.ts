@@ -39,10 +39,16 @@ const STATUS_MAP: Record<string, string> = {
   PLACED: "pending",
   CONFIRMED: "accepted",
   PREPARATION_STARTED: "preparing",
-  READY_TO_PICKUP: "ready",
+  READY_TO_PICKUP: "awaiting_pickup",
   DISPATCHED: "out_for_delivery",
   CONCLUDED: "delivered",
   CANCELLED: "cancelled",
+  PLC: "pending",
+  CFM: "accepted",
+  RTP: "awaiting_pickup",
+  DSP: "out_for_delivery",
+  CON: "delivered",
+  CAN: "cancelled",
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -78,64 +84,83 @@ async function createOrderFromPlaced(integration: any, ev: IHubEvent) {
   const addr = od.deliveryAddress ?? {};
   const items = Array.isArray(od.items) ? od.items : [];
   const total = od.total ?? {};
+  const payments = Array.isArray(od.payments?.methods) ? od.payments.methods : [];
   const phone = typeof customer.phone === "object" ? customer.phone?.number : customer.phone;
+  const paymentMethod = payments.some((p: any) => String(p.method ?? "").toUpperCase().includes("CASH"))
+    ? "cash"
+    : payments.some((p: any) => String(p.method ?? "").toUpperCase().includes("PIX"))
+      ? "pix"
+      : "card_on_delivery";
+  const orderType = String(od.orderType ?? od.type ?? "").toUpperCase() === "TAKEOUT" ? "pickup" : "delivery";
 
   const { data: existing } = await supabase
     .from("orders")
     .select("id")
     .eq("restaurant_id", integration.restaurant_id)
     .eq("external_source", "ifood")
-    .eq("external_id", ev.orderId)
+    .eq("external_order_id", ev.orderId)
     .maybeSingle();
   if (existing) return existing.id;
-
-  const itemsJson = items.map((it: any) => ({
-    name: it.name,
-    quantity: it.quantity,
-    price: Number(it.unitPrice ?? 0),
-    total: Number(it.totalPrice ?? 0),
-    observations: it.observations ?? null,
-    subItems: it.subItems ?? [],
-  }));
 
   const { data, error } = await supabase
     .from("orders")
     .insert({
       restaurant_id: integration.restaurant_id,
       customer_name: customer.name ?? "Cliente iFood",
-      customer_phone: phone ?? null,
-      address_street: addr.streetName ?? null,
-      address_number: addr.streetNumber ?? null,
-      address_neighborhood: addr.neighborhood ?? null,
-      address_city: addr.city ?? null,
-      address_state: addr.state ?? null,
+      customer_phone: phone ?? "Não informado",
+      payment_method: paymentMethod,
+      address_street: orderType === "pickup" ? "Retirada iFood" : (addr.streetName ?? null),
+      address_number: orderType === "pickup" ? "—" : (addr.streetNumber ?? null),
+      address_neighborhood: orderType === "pickup" ? "—" : (addr.neighborhood ?? null),
+      address_city: orderType === "pickup" ? "—" : (addr.city ?? null),
+      address_state: orderType === "pickup" ? "—" : (addr.state ?? null),
       address_cep: addr.postalCode ?? null,
       address_complement: addr.complement ?? null,
-      items: itemsJson,
+      address_notes: [addr.reference, od.displayId ? `iFood #${od.displayId}` : null].filter(Boolean).join("\n") || null,
       subtotal: Number(total.subTotal ?? 0),
       delivery_fee: Number(total.deliveryFee ?? 0),
       total: Number(total.orderAmount ?? 0),
       status: "pending",
-      order_type: "delivery",
+      order_type: orderType,
       external_source: "ifood",
-      external_id: ev.orderId,
-      external_display_id: od.displayId ?? null,
+      external_order_id: ev.orderId,
     })
     .select("id")
     .single();
   if (error) throw error;
+
+  if (items.length) {
+    const rows = items.map((it: any) => {
+      const subItems = Array.isArray(it.subItems) ? it.subItems : [];
+      const subNotes = subItems
+        .map((s: any) => `${s.quantity ?? 1}x ${s.name ?? s.itemName ?? "Complemento"}`)
+        .join("\n");
+      const notes = [it.observations, subNotes].filter(Boolean).join("\n") || null;
+      return {
+        order_id: data.id,
+        product_id: null,
+        product_name: it.name ?? "Item iFood",
+        unit_price: Number(it.unitPrice ?? 0),
+        quantity: Math.max(1, Number(it.quantity ?? 1)),
+        notes,
+      };
+    });
+    const { error: itemsError } = await supabase.from("order_items").insert(rows);
+    if (itemsError) throw itemsError;
+  }
+
   return data.id;
 }
 
 async function updateStatus(integration: any, ev: IHubEvent) {
-  const status = STATUS_MAP[ev.fullCode ?? ""];
+  const status = STATUS_MAP[ev.fullCode ?? ""] ?? STATUS_MAP[ev.code ?? ""];
   if (!status || !ev.orderId) return;
   await supabase
     .from("orders")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("restaurant_id", integration.restaurant_id)
     .eq("external_source", "ifood")
-    .eq("external_id", ev.orderId);
+    .eq("external_order_id", ev.orderId);
 }
 
 Deno.serve(async (req) => {

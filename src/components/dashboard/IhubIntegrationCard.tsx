@@ -26,7 +26,7 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["ihub-integration", restaurantId],
     queryFn: async () => {
       const { data } = await sb
@@ -91,6 +91,7 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
       if (error) throw error;
       toast.success("Credenciais salvas");
       qc.invalidateQueries({ queryKey: ["ihub-integration", restaurantId] });
+      await refetch();
     } catch (e: any) {
       toast.error(e.message ?? "Erro ao salvar");
     } finally {

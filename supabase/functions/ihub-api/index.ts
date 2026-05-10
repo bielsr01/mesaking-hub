@@ -40,7 +40,7 @@ async function callIhub(opts: {
   const r = await fetch(`${IHUB_BASE}${opts.path}`, {
     method: opts.method,
     headers: {
-      "Authorization": `Bearer ${opts.token}`,
+      "Authorization": `Bearer ${opts.token.trim()}`,
       "Accept": "application/json",
       ...(opts.body ? { "Content-Type": "application/json" } : {}),
     },
@@ -50,6 +50,16 @@ async function callIhub(opts: {
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 1000) }; }
   return { ok: r.ok, status: r.status, data };
+}
+
+function ihubErrorMessage(data: any, fallback: string) {
+  const msg = data?.message ?? data?.error ?? data?.errors ?? data?.raw;
+  if (!msg) return fallback;
+  return typeof msg === "string" ? msg : JSON.stringify(msg);
+}
+
+function pickIhubData(data: any) {
+  return data?.data ?? data?.result ?? data;
 }
 
 Deno.serve(async (req) => {
@@ -86,21 +96,25 @@ Deno.serve(async (req) => {
   if (intErr) return json({ error: intErr.message }, 403);
   if (!integration) return json({ error: "Configure o token e domínio antes." }, 400);
 
-  const token = integration.secret_token as string;
-  const domain = integration.domain as string;
+  const token = String(integration.secret_token ?? "").trim();
+  const domain = String(integration.domain ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  if (!token) return json({ ok: false, error: "Token secreto do iHub não configurado" }, 400);
+  if (!domain) return json({ ok: false, error: "Domínio do iHub não configurado" }, 400);
 
   try {
     if (action === "generate-user-code") {
       const r = await callIhub({ method: "POST", path: "/auth/generate-user-code", token });
-      if (!r.ok) return json({ ok: false, status: r.status, error: r.data?.message ?? "Falha no iHub", data: r.data });
-      const d = r.data ?? {};
-      if (!d.userCode || !d.authorizationCodeVerifier) {
+      if (!r.ok) return json({ ok: false, status: r.status, error: ihubErrorMessage(r.data, "Falha no iHub"), data: r.data });
+      const d = pickIhubData(r.data) ?? {};
+      const userCode = d.userCode ?? d.user_code;
+      const authorizationCodeVerifier = d.authorizationCodeVerifier ?? d.authorization_code_verifier;
+      if (!userCode || !authorizationCodeVerifier) {
         return json({ ok: false, status: r.status, error: "Resposta inesperada do iHub", data: d });
       }
       return json({
         ok: true,
-        userCode: d.userCode,
-        authorizationCodeVerifier: d.authorizationCodeVerifier,
+        userCode,
+        authorizationCodeVerifier,
         verificationUrl: d.verificationUrl,
         verificationUrlComplete: d.verificationUrlComplete,
       });
@@ -117,11 +131,12 @@ Deno.serve(async (req) => {
         token,
         body: { domain, authorizationCode, authorizationCodeVerifier },
       });
-      if (!r.ok) return json({ ok: false, status: r.status, error: r.data?.message ?? "Falha ao vincular merchant", data: r.data });
-      const merchant = r.data?.merchant ?? {};
-      const details = r.data?.ifood_details ?? {};
-      const merchantId = merchant.merchant_id ?? details.id ?? null;
-      const merchantName = details.name ?? null;
+      if (!r.ok) return json({ ok: false, status: r.status, error: ihubErrorMessage(r.data, "Falha ao vincular merchant"), data: r.data });
+      const d = pickIhubData(r.data) ?? {};
+      const merchant = d.merchant ?? {};
+      const details = d.ifood_details ?? d.ifoodDetails ?? {};
+      const merchantId = merchant.merchant_id ?? merchant.merchantId ?? details.id ?? d.merchantId ?? null;
+      const merchantName = details.name ?? merchant.name ?? d.merchantName ?? null;
 
       if (merchantId) {
         await admin
@@ -147,21 +162,21 @@ Deno.serve(async (req) => {
       if (refundAmount) payload.refundAmount = refundAmount;
 
       const r = await callIhub({ method: "POST", path: "/ifood/action", token, body: payload });
-      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : (r.data?.message ?? "Falha na ação") });
+      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : ihubErrorMessage(r.data, "Falha na ação") });
     }
 
     if (action === "order-details") {
       const { merchantId, orderId } = body;
       if (!merchantId || !orderId) return json({ ok: false, error: "merchantId e orderId são obrigatórios" }, 400);
       const r = await callIhub({ method: "GET", path: `/orders/${merchantId}/${orderId}`, token });
-      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : (r.data?.message ?? "Falha ao buscar pedido") });
+      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : ihubErrorMessage(r.data, "Falha ao buscar pedido") });
     }
 
     if (action === "cancellation-reasons") {
       const { merchantId, orderId } = body;
       if (!merchantId || !orderId) return json({ ok: false, error: "merchantId e orderId são obrigatórios" }, 400);
       const r = await callIhub({ method: "GET", path: `/orders/${merchantId}/${orderId}/cancellation-reasons`, token });
-      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : (r.data?.message ?? "Falha ao buscar motivos") });
+      return json({ ok: r.ok, status: r.status, data: r.data, error: r.ok ? null : ihubErrorMessage(r.data, "Falha ao buscar motivos") });
     }
 
     return json({ ok: false, error: `Ação desconhecida: ${action}` }, 400);
