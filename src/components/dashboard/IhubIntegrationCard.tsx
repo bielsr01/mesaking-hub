@@ -98,9 +98,24 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
 
   const isConfigured = !!data?.secret_token;
 
-  const copy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copiado`);
+  const copy = async (text: string, label: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      toast.success(`${label} copiado`);
+    } catch {
+      toast.error("Não foi possível copiar — copie manualmente");
+    }
   };
 
   const handleSave = async () => {
@@ -108,12 +123,16 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
       toast.error("Cole o token secreto do iHub");
       return;
     }
+    if (!domain.trim()) {
+      toast.error("Informe o domínio do seu sistema (mesmo cadastrado no painel iHub)");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         restaurant_id: restaurantId,
         secret_token: token.trim(),
-        domain: domain.trim() || "ihub.arcn.com.br",
+        domain: domain.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, ""),
         merchant_id: merchantId.trim() || null,
         enabled,
       };
