@@ -11,9 +11,3 @@ verify_jwt = false
 
 [functions.ihub-webhook]
 verify_jwt = false
-
-[functions.ihub-link]
-verify_jwt = false
-
-[functions.ihub-link-v2]
-verify_jwt = false
