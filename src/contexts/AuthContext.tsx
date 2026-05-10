@@ -38,17 +38,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let currentUserId: string | null = null;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      const newId = newSession?.user?.id ?? null;
+
+      // Ignore transient null sessions that aren't an explicit SIGNED_OUT.
+      // Supabase can momentarily emit session=null during token refresh
+      // (e.g. when the tab regains focus), which would otherwise log the user out.
+      if (!newId && event !== "SIGNED_OUT" && event !== "INITIAL_SESSION") {
+        return;
+      }
+
       setSession(newSession);
       setUser(newSession?.user ?? null);
-      const newId = newSession?.user?.id ?? null;
+
       // Only (re)load roles when the user identity actually changes.
-      // Avoids unmounting the app on TOKEN_REFRESHED when switching browser tabs.
       if (newId && newId !== currentUserId) {
         currentUserId = newId;
         setRolesLoading(true);
         setTimeout(() => loadRoles(newId), 0);
-      } else if (!newId) {
+      } else if (!newId && event === "SIGNED_OUT") {
         currentUserId = null;
         setRoles([]);
         setRolesLoading(false);
