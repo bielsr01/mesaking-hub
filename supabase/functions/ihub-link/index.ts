@@ -70,8 +70,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  const base = normalizeIhubBaseUrl(integration.domain);
+  const base = IHUB_BASE_URL;
+  const userDomain = normalizeUserDomain(integration.domain);
   const token = integration.secret_token;
+
+  if (!userDomain) {
+    return new Response(JSON.stringify({ error: "Domínio do sistema não configurado. Cadastre o mesmo domínio que está no painel iHub." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     if (action === "generate-user-code") {
@@ -109,7 +116,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          domain: integration.domain || "ihub.arcn.com.br",
+          domain: userDomain,
           authorizationCode,
           authorizationCodeVerifier,
         }),
