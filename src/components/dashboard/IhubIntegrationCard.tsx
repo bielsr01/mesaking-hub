@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 const sb = supabase as any;
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ihub-webhook`;
+const IHUB_LINK_FUNCTION = "ihub-link-v2";
 
 export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) {
   const [open, setOpen] = useState(false);
@@ -48,7 +49,7 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
     setLinking(true);
     setLinkError(null);
     try {
-      const { data: res, error } = await supabase.functions.invoke("ihub-link", {
+      const { data: res, error } = await supabase.functions.invoke(IHUB_LINK_FUNCTION, {
         body: { action: "generate-user-code", restaurantId },
       });
       if (error) throw error;
@@ -74,7 +75,7 @@ export function IhubIntegrationCard({ restaurantId }: { restaurantId: string }) 
     }
     setLinking(true);
     try {
-      const { data: res, error } = await supabase.functions.invoke("ihub-link", {
+      const { data: res, error } = await supabase.functions.invoke(IHUB_LINK_FUNCTION, {
         body: {
           action: "link-merchant",
           restaurantId,
