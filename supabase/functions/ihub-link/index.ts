@@ -82,7 +82,9 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "generate-user-code") {
-      const r = await fetch(`${base}/auth/generate-user-code`, {
+      const url = `${base}/auth/generate-user-code`;
+      console.log("[ihub-link] generate-user-code →", url);
+      const r = await fetch(url, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -90,10 +92,17 @@ Deno.serve(async (req) => {
         },
       });
       const text = await r.text();
+      const ct = r.headers.get("content-type") || "";
       let data: any;
-      try { data = JSON.parse(text); } catch { data = { raw: text }; }
-      if (!r.ok) {
-        return new Response(JSON.stringify({ error: "iHub error", status: r.status, data }), {
+      try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 300) }; }
+      if (!r.ok || !ct.includes("json") || !data?.userCode) {
+        return new Response(JSON.stringify({
+          error: "Resposta inválida do iHub. Verifique se o token está correto e se a integração foi salva.",
+          status: r.status,
+          contentType: ct,
+          data,
+          calledUrl: url,
+        }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
